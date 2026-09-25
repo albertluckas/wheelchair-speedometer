@@ -1,6 +1,4 @@
-// IMPORTANT: LCDWIKI_SPI LIBRARY MUST BE SPECIFICALLY
-// CONFIGURED FOR EITHER THE TFT SHIELD OR THE BREAKOUT BOARD.
-
+//MADE wheelchair code, based on the demos for the lcd screen
 //This program is a demo of displaying string
 
 //when using the BREAKOUT BOARD only and using these hardware spi lines to the LCD,
@@ -56,7 +54,7 @@ void setup()
 
 void loop() 
 {
-  mylcd.Set_Text_Mode(0);
+  mylcd.Set_Text_Mode(1);
   //display 1 times string
   mylcd.Fill_Screen(0x0000);
   mylcd.Set_Text_colour(RED);
