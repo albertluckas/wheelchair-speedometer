@@ -46,55 +46,63 @@ LCDWIKI_SPI mylcd(ST7796S,A5,A3,A4,-1); //model,cs,dc,reset,led
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 
+
+
+//From bildr article: http://bildr.org/2012/08/rotary-encoder-arduino/
+//encoder stuff
+//these pins can not be changed 2/3 are special pins
+int encoderPin1 = 2;
+int encoderPin2 = 3;
+
+volatile int lastEncoded = 0;
+volatile long encoderValue = 0;
+
+long lastencoderValue = 0;
+
+int lastMSB = 0;
+int lastLSB = 0;
+
 void setup() 
 {
   mylcd.Init_LCD();
   mylcd.Fill_Screen(BLACK);
+
+  pinMode(encoderPin1, INPUT); 
+  pinMode(encoderPin2, INPUT);
+
+  digitalWrite(encoderPin1, HIGH); //turn pullup resistor on
+  digitalWrite(encoderPin2, HIGH); //turn pullup resistor on
+    //call updateEncoder() when any high/low changed seen
+  //on interrupt 0 (pin 2), or interrupt 1 (pin 3) 
+  attachInterrupt(0, updateEncoder, CHANGE); 
+  attachInterrupt(1, updateEncoder, CHANGE);
+
 }
 
 void loop() 
 {
-  mylcd.Set_Text_Mode(1);
-  //display 1 times string
-  mylcd.Fill_Screen(0x0000);
-  mylcd.Set_Text_colour(RED);
-  mylcd.Set_Text_Back_colour(BLACK);
-  mylcd.Set_Text_Size(1);
-  mylcd.Print_String("Hello World!", 0, 0);
-  mylcd.Print_Number_Float(01234.56789, 2, 0, 8, '.', 0, ' ');  
-  mylcd.Print_Number_Int(0xDEADBEF, 0, 16, 0, ' ',16);
-  //mylcd.Print_String("DEADBEF", 0, 16);
-
-  //display 2 times string
-  mylcd.Set_Text_colour(GREEN);
-  mylcd.Set_Text_Size(2);
-  mylcd.Print_String("Hello World!", 0, 40);
-  mylcd.Print_Number_Float(01234.56789, 2, 0, 56, '.', 0, ' ');  
-  mylcd.Print_Number_Int(0xDEADBEF, 0, 72, 0, ' ',16);
-  //mylcd.Print_String("DEADBEEF", 0, 72);
-
-  //display 3 times string
-  mylcd.Set_Text_colour(BLUE);
-  mylcd.Set_Text_Size(3);
-  mylcd.Print_String("Hello World!", 0, 104);
-  mylcd.Print_Number_Float(01234.56789, 2, 0, 128, '.', 0, ' ');  
-  mylcd.Print_Number_Int(0xDEADBEF, 0, 152, 0, ' ',16);
- // mylcd.Print_String("DEADBEEF", 0, 152);
-
-  //display 4 times string
-  mylcd.Set_Text_colour(WHITE);
-  mylcd.Set_Text_Size(4);
-  mylcd.Print_String("Hello!", 0, 192);
-
-  //display 5 times string
-  mylcd.Set_Text_colour(YELLOW);
-  mylcd.Set_Text_Size(5);
-  mylcd.Print_String("Hello!", 0, 224);
+  mylcd.Set_Text_Mode(0);
 
   //display 6 times string
-  mylcd.Set_Text_colour(RED);
-  mylcd.Set_Text_Size(10);
+  mylcd.Set_Text_colour(WHITE);
+  mylcd.Set_Text_Back_colour(BLACK);
+  mylcd.Set_Text_Size(6);
   mylcd.Print_String("Hello!", 0, 266);
+ 
+  mylcd.Print_Number_Float(encoderValue/80.0,2,0, 8, '.', 0, ' ');
+  delay(100);
+}
 
-  delay(3000);
+
+void updateEncoder(){
+  int MSB = digitalRead(encoderPin1); //MSB = most significant bit
+  int LSB = digitalRead(encoderPin2); //LSB = least significant bit
+
+  int encoded = (MSB << 1) |LSB; //converting the 2 pin value to single number
+  int sum  = (lastEncoded << 2) | encoded; //adding it to the previous encoded value
+
+  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) encoderValue ++;
+  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) encoderValue --;
+
+  lastEncoded = encoded; //store this value for next time
 }
