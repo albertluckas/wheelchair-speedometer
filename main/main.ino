@@ -56,10 +56,9 @@ LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED);  //model,cs,dc,reset,led
 #define stateReady 0
 #define stateGoing 1
 #define stateFinished 2
-byte mode = modeDist;     //current goal type
-byte state = stateSetup;  //state of the system
-
-byte size = 5;                                                                    // current goal magnitude
+byte mode = modeDist;                                                             //current goal type
+byte state = stateSetup;                                                          //state of the system
+long target = 100;                                                                // current goal magnitude
 int distGoals[] = { 1, 2, 5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 500, 1000 };  //array of potential dist goals
 int timeGoals[] = { 30, 60, 90, 120, 180 };                                       //array of potential time  goals
 
@@ -69,7 +68,6 @@ volatile long encoderValue = 0;
 
 int lastMSB = 0;
 int lastLSB = 0;
-unsigned long startTime;
 
 
 void setup() {
@@ -97,6 +95,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(encoderPin1), updateEncoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(encoderPin2), updateEncoder, CHANGE);
   state = stateReady;
+  firstDrawReady();
   mode = modeDist;
 }
 
@@ -105,8 +104,8 @@ updatencoder is called as interupt when the clk moves, and
 changes encoderValue. main loop checks encoderValue
 */
 
-int inputDelayTime = 0;  //the time in millis at which we will again accept button input, because debouncing is lame
-int startTime=0;
+long inputDelayTime = 0;  //the time in millis at which we will again accept button input, because debouncing is lame
+long startTime = 0;       //when the current session started
 
 
 
@@ -116,30 +115,49 @@ void loop() {
   bool increasePressed = false;
   bool decreasePressed = false;
   bool modePressed = false;
-  if(millis()>inputDelayTime){
-    statePressed =    !digitalRead(inputPinState);
+  if (millis() > inputDelayTime) {
+    statePressed = !digitalRead(inputPinState);
     increasePressed = !digitalRead(inputPinIncrease);
     decreasePressed = !digitalRead(inputPinDecrease);
-    modePressed =     !digitalRead(inputPinMode);
-    if(statePressed||increasePressed||decreasePressed||modePressed){
-      inputDelayTime=millis()+1000;
+    modePressed = !digitalRead(inputPinMode);
+    if (statePressed || increasePressed || decreasePressed || modePressed) {
+      inputDelayTime = millis() + 1000;
     }
   }
 
 
   switch (state) {
     case stateReady:
-      mylcd.Print("Ready", 0, 0);
+
       if (statePressed) {
         state = stateGoing;
+        mylcd.Fill_Screen(BLACK);
+
         return;
       }
+      if (modePressed) {
+        mode = (mode + 1) % 3;
+        target = 100;
+        mylcd.Print_Number_Int(mode, 100, 100, 1, '0', 10);
+        mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+      }
+      if (increasePressed) {
+        target *= 2;
+        mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+      }
+      if (decreasePressed) {
+        target /= 2;
+        mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+      }
+
 
       // statements
       break;
     case stateGoing:
       if (statePressed) {
         state = stateFinished;
+
+        mylcd.Fill_Screen(BLACK);
         return;
       }
       mylcd.Print("Going", 0, 0);
@@ -148,16 +166,26 @@ void loop() {
     case stateFinished:
       if (statePressed) {
         state = stateReady;
+        firstDrawReady();
+
         return;
       }
       mylcd.Print("Done!", 0, 0);
       // statements
       break;
   }
-  mylcd.Print_Number_Int(encoderValue, 10, 200, 0, "0", 10);
-  printTime(millis(), 10, 100, 8, false);
+  //mylcd.Print_Number_Int(encoderValue, 10, 200, 0, "0", 10);
+  //printTime(millis(), 10, 100, 8, false);
 }
-
+//drawing for when entering ready state
+void firstDrawReady() {
+  mylcd.Fill_Screen(BLACK);
+  mylcd.Print("Ready", 0, 0);
+  mylcd.Print("M:", 0, 100);
+  mylcd.Print("T:", 0, 200);
+  mylcd.Print_Number_Int(mode, 100, 100, 1, '0', 10);
+  mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+}
 //prints a time in MM:SS format, gives miliseconds in exact mode, which should only be used for an amount of time that has passed.trying to measure time that is happening is to slow to print
 //height is standard for font, 6*fontsize pixels tall.
 //width is
