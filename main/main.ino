@@ -44,11 +44,9 @@ LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED);  //model,cs,dc,reset,led
 #define encoderPin1 2
 #define encoderPin2 3
 
-#define inputPinStart 4
-#define inputPinIncrease 5  // also used to force finish
-#define inputPinFinish 5
-#define inputPinDecrease 6  // also used to reset
-#define inputPinReset 6
+#define inputPinState 4  //change state
+#define inputPinIncrease 5
+#define inputPinDecrease 6
 #define inputPinMode 7
 
 #define modeDist 0
@@ -89,7 +87,7 @@ void setup() {
 
   pinMode(encoderPin1, INPUT_PULLUP);
   pinMode(encoderPin2, INPUT_PULLUP);
-  pinMode(inputPinStart, INPUT_PULLUP);
+  pinMode(inputPinState, INPUT_PULLUP);
   pinMode(inputPinIncrease, INPUT_PULLUP);
   pinMode(inputPinDecrease, INPUT_PULLUP);
   pinMode(inputPinMode, INPUT_PULLUP);
@@ -104,17 +102,35 @@ void setup() {
 
 /*Interface between UI and rotary encoder input handling:
 updatencoder is called as interupt when the clk moves, and 
-
+changes encoderValue. main loop checks encoderValue
 */
-unsigned long timeToDisp;
+
+int inputDelayTime = 0;  //the time in millis at which we will again accept button input, because debouncing is lame
+int startTime=0;
 
 
 
 void loop() {
+  //input reading
+  bool statePressed = false;
+  bool increasePressed = false;
+  bool decreasePressed = false;
+  bool modePressed = false;
+  if(millis()>inputDelayTime){
+    statePressed =    !digitalRead(inputPinState);
+    increasePressed = !digitalRead(inputPinIncrease);
+    decreasePressed = !digitalRead(inputPinDecrease);
+    modePressed =     !digitalRead(inputPinMode);
+    if(statePressed||increasePressed||decreasePressed||modePressed){
+      inputDelayTime=millis()+1000;
+    }
+  }
+
+
   switch (state) {
     case stateReady:
       mylcd.Print("Ready", 0, 0);
-      if (!digitalRead(inputPinStart)) {
+      if (statePressed) {
         state = stateGoing;
         return;
       }
@@ -122,7 +138,7 @@ void loop() {
       // statements
       break;
     case stateGoing:
-      if (!digitalRead(inputPinFinish)) {
+      if (statePressed) {
         state = stateFinished;
         return;
       }
@@ -130,11 +146,11 @@ void loop() {
       // statements
       break;
     case stateFinished:
-      if (!digitalRead(inputPinReset)) {
+      if (statePressed) {
         state = stateReady;
         return;
       }
-      mylcd.Print("done", 0, 0);
+      mylcd.Print("Done!", 0, 0);
       // statements
       break;
   }
