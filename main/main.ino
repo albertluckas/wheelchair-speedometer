@@ -77,7 +77,7 @@ void setup() {
   mylcd.Set_Text_Mode(0);
   mylcd.Set_Rotation(1);
   //display 6 times string
-  mylcd.Set_Text_colour(WHITE);
+  mylcd.Set_Text_colour(RED);
   mylcd.Set_Text_Back_colour(BLACK);
   mylcd.Set_Text_Size(10);  //the multiplier for the pixel font. Each glyph is a 5x6 grid, and they will be printed with text size pixel space between them
 
@@ -94,9 +94,8 @@ void setup() {
   //on interrupt 0 (pin 2), or interrupt 1 (pin 3)
   attachInterrupt(digitalPinToInterrupt(encoderPin1), updateEncoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(encoderPin2), updateEncoder, CHANGE);
-  state = stateReady;
-  firstDrawReady();
   mode = modeDist;
+  setState(stateFinished);
 }
 
 /*Interface between UI and rotary encoder input handling:
@@ -108,6 +107,7 @@ long inputDelayTime = 0;  //the time in millis at which we will again accept but
 long startTime = 0;       //when the current session started
 
 
+float colorTheta = 0;  //this is not for actual rotation. its for rainbows!
 
 void loop() {
   //input reading
@@ -124,67 +124,107 @@ void loop() {
       inputDelayTime = millis() + 1000;
     }
   }
-
+  if (statePressed) {
+    setState((state + 1) % 3);
+    return;
+  }
 
   switch (state) {
     case stateReady:
-
-      if (statePressed) {
-        state = stateGoing;
-        mylcd.Fill_Screen(BLACK);
-
-        return;
-      }
       if (modePressed) {
         mode = (mode + 1) % 3;
-        target = 100;
-        mylcd.Print_Number_Int(mode, 100, 100, 1, '0', 10);
-        mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+        target = 100000;
+
+        printTarget();
       }
       if (increasePressed) {
         target *= 2;
-        mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+        printTarget();
       }
       if (decreasePressed) {
         target /= 2;
-        mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+        printTarget();
       }
 
 
       // statements
       break;
     case stateGoing:
-      if (statePressed) {
-        state = stateFinished;
-
-        mylcd.Fill_Screen(BLACK);
+      if (finishChecker()) {
+        setState(stateFinished);
         return;
       }
-      mylcd.Print("Going", 0, 0);
+      mylcd.Print_Number_Int(encoderValue, 10, 200, 0, "0", 10);
+      if (mode == modeTime) {
+
+        printTime(target + startTime - millis(), 10, 100, 8, false);
+      } else {
+        printTime(millis() - startTime, 10, 100, 8, false);
+      }
+
       // statements
       break;
     case stateFinished:
-      if (statePressed) {
-        state = stateReady;
-        firstDrawReady();
+      mylcd.Set_Text_colour(nextRainbowColor());
+      mylcd.Print("Done!", 100 - round(100 * cos(colorTheta)), 0);
+      mylcd.Set_Text_colour(RED);
 
-        return;
-      }
-      mylcd.Print("Done!", 0, 0);
       // statements
       break;
   }
-  //mylcd.Print_Number_Int(encoderValue, 10, 200, 0, "0", 10);
-  //printTime(millis(), 10, 100, 8, false);
 }
-//drawing for when entering ready state
-void firstDrawReady() {
-  mylcd.Fill_Screen(BLACK);
-  mylcd.Print("Ready", 0, 0);
-  mylcd.Print("M:", 0, 100);
-  mylcd.Print("T:", 0, 200);
-  mylcd.Print_Number_Int(mode, 100, 100, 1, '0', 10);
-  mylcd.Print_Number_Int(target, 100, 200, 1, '0', 10);
+//drawing for when entering state
+void setState(byte targState) {
+  state = targState;
+  switch (targState) {
+    case stateReady:
+      mylcd.Fill_Screen(BLACK);
+      mylcd.Print("Ready", 0, 0);
+      mylcd.Print("M:", 0, 100);
+      printTarget();
+      break;
+    case stateGoing:
+      mylcd.Fill_Screen(BLACK);
+      mylcd.Print("Going", 0, 0);
+      encoderValue = 0;
+      startTime = millis();
+
+      break;
+    case stateFinished:
+      long int finTime = millis();
+      mylcd.Fill_Screen(BLACK);
+
+      mylcd.Set_Text_colour(nextRainbowColor());
+      mylcd.Print("Done!", 0, 0);
+      mylcd.Set_Text_colour(RED);
+      printTime(finTime - startTime, 10, 100, 8, true);
+
+      mylcd.Set_Text_Size(8);
+      mylcd.Print_Number_Int(encoderValue, 10, 180, 1, '0', 10);
+
+      mylcd.Print_Number_Int(1000 * encoderValue / (finTime - startTime), 10, 180, 1, '0', 10);  //clks per second avg
+      mylcd.Set_Text_Size(10);
+      break;
+  }
+}
+//formats and prints teh target while in readyup mode
+void printTarget() {
+  mylcd.Print("                ", 100, 100);
+  switch (mode) {
+    case modeTime:
+
+      printTime(target, 100, 100, 10, false);
+      break;
+    case modeDist:
+      mylcd.Print_Number_Int(target, 100, 100, 1, '0', 10);
+      break;
+    case modeTillStop:
+      mylcd.Print("Free", 100, 100);
+      break;
+  }
+}
+bool finishChecker() {
+  return false;
 }
 //prints a time in MM:SS format, gives miliseconds in exact mode, which should only be used for an amount of time that has passed.trying to measure time that is happening is to slow to print
 //height is standard for font, 6*fontsize pixels tall.
@@ -213,6 +253,11 @@ char* printTime(long time, int x0, int y0, int fontsize, bool exact) {
   mylcd.Set_Text_Size(prevSize);
 }
 
+//FUNction that gets rainbow colors. The speed of the rainbow is display update speed-dependeaent, cause whatever.
+uint16_t nextRainbowColor() {
+  colorTheta += 0.1;
+  return mylcd.Color_To_565(round(100 - 100 * cos(colorTheta)), round(100 - 100 * cos(colorTheta + 2)), round(100 - 100 * cos(colorTheta + 4)));
+}
 
 void updateEncoder() {
   int MSB = digitalRead(encoderPin1);  //MSB = most significant bit
