@@ -37,6 +37,8 @@ LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED);  //model,cs,dc,reset,led
 #define YELLOW 0xFFE0
 #define WHITE 0xFFFF
 
+//Ratio
+#define clksPerMile 1000
 
 //From bildr article: http://bildr.org/2012/08/rotary-encoder-arduino/
 //encoder stuff
@@ -56,11 +58,11 @@ LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED);  //model,cs,dc,reset,led
 #define stateReady 0
 #define stateGoing 1
 #define stateFinished 2
-byte mode = modeDist;                                                             //current goal type
-byte state = stateSetup;                                                          //state of the system
-long target = 100;                                                                // current goal magnitude
-int distGoals[] = { 1, 2, 5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 500, 1000 };  //array of potential dist goals
-int timeGoals[] = { 30, 60, 90, 120, 180 };                                       //array of potential time  goals
+byte mode = modeTime;  //current goal type
+float target = 100000;  // current goal magnitude
+
+byte state = stateSetup;  //state of the system
+
 
 volatile int lastEncoded = 0;
 volatile long encoderValue = 0;
@@ -95,7 +97,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(encoderPin1), updateEncoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(encoderPin2), updateEncoder, CHANGE);
   mode = modeDist;
-  setState(stateFinished);
+  setState(stateReady);
 }
 
 /*Interface between UI and rotary encoder input handling:
@@ -179,8 +181,8 @@ void setState(byte targState) {
   switch (targState) {
     case stateReady:
       mylcd.Fill_Screen(BLACK);
-      mylcd.Print("Ready", 0, 0);
-      mylcd.Print("M:", 0, 100);
+      mylcd.Print("READY", 0, 0);
+      mylcd.Print("Target:", 0, 100);
       printTarget();
       break;
     case stateGoing:
@@ -192,44 +194,52 @@ void setState(byte targState) {
       break;
     case stateFinished:
       long int finTime = millis();
+      colorTheta=0;
       mylcd.Fill_Screen(BLACK);
-
-      mylcd.Set_Text_colour(nextRainbowColor());
-      mylcd.Print("Done!", 0, 0);
-      mylcd.Set_Text_colour(RED);
       printTime(finTime - startTime, 10, 100, 8, true);
 
       mylcd.Set_Text_Size(8);
       mylcd.Print_Number_Int(encoderValue, 10, 180, 1, '0', 10);
 
-      mylcd.Print_Number_Int(1000 * encoderValue / (finTime - startTime), 10, 180, 1, '0', 10);  //clks per second avg
+      //mylcd.Print_Number_Int(1000 * encoderValue / (finTime - startTime), 10, 180, 1, '0', 10);  //clks per second avg
       mylcd.Set_Text_Size(10);
       break;
   }
 }
 //formats and prints teh target while in readyup mode
 void printTarget() {
-  mylcd.Print("                ", 100, 100);
+  //clear
+  mylcd.Print("                ", 0, 200);
   switch (mode) {
     case modeTime:
 
-      printTime(target, 100, 100, 10, false);
+      printTime(target, 0, 200, 10, false);
       break;
     case modeDist:
-      mylcd.Print_Number_Int(target, 100, 100, 1, '0', 10);
+
+      mylcd.Print_Number_Int(target / 100, 0, 200, 1, '0', 10);
       break;
     case modeTillStop:
-      mylcd.Print("Free", 100, 100);
+      mylcd.Print("Free", 0, 200);
       break;
   }
 }
+//checks if we have met our finish condition
 bool finishChecker() {
+  // this could all be a one liner, but this is more redable
+  if (mode == modeTime && target + startTime <= millis()) {
+    return true;
+  } else if (mode == modeDist && encoderValue > target/100) {
+    return true;
+  }
+
+  //TODO: this
   return false;
 }
 //prints a time in MM:SS format, gives miliseconds in exact mode, which should only be used for an amount of time that has passed.trying to measure time that is happening is to slow to print
 //height is standard for font, 6*fontsize pixels tall.
 //width is
-char* printTime(long time, int x0, int y0, int fontsize, bool exact) {
+void printTime(long time, int x0, int y0, int fontsize, bool exact) {
   uint8_t prevSize = mylcd.Get_Text_Size();
 
   mylcd.Set_Text_Size(fontsize);
@@ -253,7 +263,8 @@ char* printTime(long time, int x0, int y0, int fontsize, bool exact) {
   mylcd.Set_Text_Size(prevSize);
 }
 
-//FUNction that gets rainbow colors. The speed of the rainbow is display update speed-dependeaent, cause whatever.
+
+//Function that gets rainbow colors. The speed of the rainbow is display update speed-dependeaent, cause whatever.
 uint16_t nextRainbowColor() {
   colorTheta += 0.1;
   return mylcd.Color_To_565(round(100 - 100 * cos(colorTheta)), round(100 - 100 * cos(colorTheta + 2)), round(100 - 100 * cos(colorTheta + 4)));
